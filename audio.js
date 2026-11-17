@@ -56,6 +56,12 @@ window.Sfx = (() => {
     whoosh() { noise(0.4, 0.16, 'bandpass', 300, 1200, 0.8); },
     bosshit() { tone('square', 200, 70, 0.35, 0.2); noise(0.3, 0.25, 'lowpass', 1200, 200); },
     win() { [262, 330, 392, 523].forEach((f, i) => tone('triangle', f, f, 0.5, 0.12, i * 0.16)); },
+    heartbeat() { tone('sine', 62, 38, 0.16, 0.4); tone('sine', 56, 34, 0.16, 0.3, 0.2); },
+    whisper() { for (let i = 0; i < 4; i++) noise(0.9 + Math.random() * 0.6, 0.05, 'bandpass', 1400 + Math.random() * 1600, 900 + Math.random() * 1500, 9, i * 0.25); },
+    hiss() { noise(0.4, 0.12, 'bandpass', 3200, 1600, 1.5); },
+    scream() { for (const f of [430, 520, 610, 745]) tone('sawtooth', f, f * 1.6, 0.7, 0.07); noise(0.7, 0.3, 'bandpass', 1800, 3200, 0.8); tone('sine', 80, 30, 0.6, 0.4); },
+    powerdown() { tone('sawtooth', 240, 28, 1.1, 0.12); noise(0.3, 0.18, 'lowpass', 2500, 120); },
+    powerup() { tone('sawtooth', 40, 140, 0.5, 0.05); noise(0.15, 0.08, 'bandpass', 3000, 3000, 2); },
     creak() { noise(1.4, 0.05, 'bandpass', 220 + Math.random() * 300, 120 + Math.random() * 200, 14); }
   };
   function play(name) { if (!ctx || muted || !FX[name]) return; try { FX[name](); } catch (e) {} }

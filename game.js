@@ -29,6 +29,9 @@
   }
   addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 200)); resize();
 
+  // Blutschrift an den Wänden (zufällig gewählt, pro Stelle immer gleich)
+  const WRITING = ['ER SIEHT DICH', 'LAUF', 'NICHT UMDREHEN', 'WIR HABEN ES GEWECKT', 'BECK GROUP LÜGT', 'ES IST IN DEN WÄNDEN',
+    'ZÄHL DIE LICHTER', 'ER WAR EINER VON UNS', 'HILFE', 'NICHT INS DUNKLE', 'ER HÖRT DICH', 'KEINER KOMMT RAUS'];
   // Farben pro Deck
   const THEMES = {
     cargo:   { bg: ['#0b1016', '#141c22'], wall: '#27313a', edge: '#5d6f78', rib: '#0f161c', glow: '#ffcf8a', acid: '#7dff5a' },
@@ -64,6 +67,7 @@
 
   // ---------- 2. Level laden ----------
   let L = null, levelIdx = 0, theme = THEMES.cargo, grid = [], W = 0;
+  let decor = [], scares = [], stalker = null, stalkT = 0, hbT = 0, blackT = 0, blackout = 0, scareT = 0, glitch = 0;
   let p = null, ch = CHARS[0], items = [], lamps = [], enemies = [], plats = [], vents = [], lasers = [], tents = [], crumble = {}, parts = [];
   let boss = null, spawn = { x: 0, y: 0 }, lastSafe = { x: 0, y: 0 }, camX = 0, time = 0, deaths = 0, chips = 0, chipsTotal = 0;
   let phase = 'menu', phaseT = 0, shake = 0, hurtFlash = 0, introT = 0, god = false;
@@ -78,13 +82,19 @@
     W = rows[0].length; grid = rows.map(r => r.split(''));
     for (let r = 0; r < ROWS; r++) { grid[r][0] = '#'; grid[r][W - 1] = '#'; }      // Wände an beiden Enden
     items = []; lamps = []; enemies = []; plats = []; vents = []; lasers = []; tents = []; crumble = {}; parts = []; boss = null;
+    decor = []; scares = []; stalker = null; stalkT = 14 + Math.random() * 8; blackT = 10 + Math.random() * 10; blackout = 0; scareT = 0;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < W; c++) {
       const t = grid[r][c], x = c * T, y = r * T;
-      if ('PohKElcdMB'.includes(t)) grid[r][c] = ' ';
+      if ('PohKElcdMBjubwJ'.includes(t)) grid[r][c] = ' ';
       if (t === 'P') spawn = { x: x + 6, y: y };
       else if (t === 'o' || t === 'h' || t === 'K' || t === 'E') items.push({ type: t, x: x + T / 2, y: y + T / 2, on: false });
       else if (t === 'l') lamps.push({ x: x + T / 2, y: T + 6, broken: hash(c, i) < 0.3 });
       else if (t === 'c') enemies.push({ type: 'c', x: x + 3, y: y + T - 18, w: 26, h: 18, vy: 0, dir: -1, home: x, alive: true });
+      else if (t === 'j') enemies.push({ type: 'j', x: x + 4, y: y + T - 20, w: 24, h: 20, vx: 0, vy: 0, cd: 0.5, dir: -1, alive: true });
+      else if (t === 'u') enemies.push({ type: 'u', x: x + 4, y: T, hy: T, w: 24, h: 20, vy: 0, dir: -1, st: 'hang', alive: true });
+      else if (t === 'b') decor.push({ type: 'b', x: x + T / 2, y: y + T, col: ['#e86a2a', '#556b2f', '#8a96a4', '#6b4a8a'][fl(hash(c, i) * 4)] });
+      else if (t === 'w') decor.push({ type: 'w', x: x + T / 2, y: y + T / 2, txt: WRITING[fl(hash(c, i + 3) * WRITING.length)] });
+      else if (t === 'J') scares.push({ x: x, done: false });
       else if (t === 'd') enemies.push({ type: 'd', x: x, y: y + 6, w: 26, h: 18, hx: x, hy: y + 6, ph: c, alive: true });
       else if (t === 'M') plats.push({ x: x, y: y, w: 64, h: 12, hx: x, range: 96, ph: c * 0.7, dx: 0 });
       else if (t === 'S') vents.push({ c, r });
@@ -133,10 +143,11 @@
     else { p.vy = -330; p.vx = (p.x + p.w / 2 < fromX ? -1 : 1) * 200; }
     return true;
   }
-  function die() { Sfx.play('die'); deaths++; phase = 'dead'; phaseT = 1.3; }
+  function die() { Sfx.play('die'); deaths++; phase = 'dead'; phaseT = 2.2; stalker = null; }
+  // Alle Herzen verloren: das ganze Deck beginnt von vorne (Gegner, Chips, Med-Stationen – alles zurück)
   function respawn() {
-    resetPlayer(spawn); phase = 'play'; updateHud();
-    if (boss) { const b0 = boss; boss = makeBoss(b0.sx, b0.sy); updateBossBar(); }
+    const d = deaths; loadLevel(levelIdx); deaths = d; introT = 0;
+    phase = 'play'; updateHud(); updateBossBar();
   }
 
   function stepPlayer(dt) {
@@ -193,10 +204,25 @@
         const fc = fl((e.x + (e.dir > 0 ? e.w + 2 : -2)) / T), fr = fl((e.y + e.h + 4) / T);
         if (m.hitX || (my.land && !solid(fc, fr)) || Math.abs(e.x - e.home) > 4.5 * T && Math.sign(e.x - e.home) === e.dir) e.dir = -e.dir;
         if (e.y > VH + 40) e.alive = false;
+      } else if (e.type === 'j') {                      // Springer: lauert und springt dich an
+        e.vy = Math.min(900, e.vy + GRAV * dt); e.cd -= dt;
+        if (moveBox(e, e.vx * dt, 0).hitX) e.vx = 0;
+        const my = moveBox(e, 0, e.vy * dt); e.ground = my.land; if (my.land) { e.vy = 0; e.vx = 0; }
+        const dxp = (p.x + p.w / 2) - (e.x + e.w / 2); e.dir = Math.sign(dxp) || 1;
+        if (e.ground && e.cd <= 0 && Math.abs(dxp) < 180 && Math.abs(p.y - e.y) < 130 && phase === 'play') { e.vy = -560; e.vx = e.dir * 200; e.cd = 1.5; Sfx.play('hiss'); }
+        if (e.y > VH + 40) e.alive = false;
+      } else if (e.type === 'u') {                      // Lauerer: hängt an der Decke und lässt sich fallen
+        if (e.st === 'hang') { e.y = e.hy + Math.sin(time * 2 + e.x) * 3;
+          if (Math.abs((p.x + p.w / 2) - (e.x + e.w / 2)) < 46 && p.y > e.y && phase === 'play') { e.st = 'fall'; Sfx.play('hiss'); } }
+        else { e.vy = Math.min(900, e.vy + GRAV * dt); const my = moveBox(e, 0, e.vy * dt);
+          if (my.land) { e.vy = 0; if (e.st === 'fall') { e.st = 'crawl'; e.dir = p.x < e.x ? -1 : 1; Sfx.play('land'); } }
+          if (e.st === 'crawl') { const m = moveBox(e, e.dir * 75 * dt, 0), fc = fl((e.x + (e.dir > 0 ? e.w + 2 : -2)) / T), fr = fl((e.y + e.h + 4) / T);
+            if (m.hitX || (my.land && !solid(fc, fr))) e.dir = -e.dir; }
+          if (e.y > VH + 40) e.alive = false; }
       } else { e.x = e.hx + Math.sin(time * 1.2 + e.ph) * 90; e.y = e.hy + Math.sin(time * 2.6 + e.ph) * 10; }
       if (phase === 'play' && overlap(p, e.x, e.y, e.w, e.h)) {
         if (p.vy > 60 && p.y + p.h - p.vy * dt * 2 <= e.y + 10) {            // von oben = besiegt
-          e.alive = false; p.vy = keys.j ? -560 : -400; p.jumps = 1; Sfx.play('stomp'); burst(e.x + e.w / 2, e.y + e.h / 2, 12, e.type === 'c' ? '#7a2a3a' : '#f5c542', 150);
+          e.alive = false; p.vy = keys.j ? -560 : -400; p.jumps = 1; Sfx.play('stomp'); burst(e.x + e.w / 2, e.y + e.h / 2, 12, e.type === 'd' ? '#f5c542' : '#7a2a3a', 150);
         } else hurt(e.x + e.w / 2);
       }
     }
@@ -215,9 +241,47 @@
       if (it.on || !overlap(p, it.x - 10, it.y - 12, 20, 26)) continue;
       if (it.type === 'o') { it.on = true; chips++; Sfx.play('chip'); burst(it.x, it.y, 6, '#6fe3ff', 90, 0); updateHud(); }
       else if (it.type === 'h') { if (p.hp < (ch.hp || 3)) { it.on = true; p.hp++; Sfx.play('heart'); burst(it.x, it.y, 8, '#ff5a6e', 90, 0); updateHud(); } }
-      else if (it.type === 'K') { it.on = true; spawn = { x: it.x - 9, y: it.y - T / 2 }; Sfx.play('check'); burst(it.x, it.y, 14, '#8affc1', 120, 0); toast('Gespeichert'); }
+      else if (it.type === 'K') { it.on = true; p.hp = ch.hp || 3; Sfx.play('check'); burst(it.x, it.y, 14, '#ff5a6e', 120, 0); toast('Med-Station: Herzen aufgefüllt'); updateHud(); }
       else if (it.type === 'E') { levelDone(); return; }
     }
+  }
+
+  // ---------- Horror ----------
+  // "Der Schatten": taucht hinter dir auf und verfolgt dich. Man kann ihn nicht besiegen –
+  // nur weglaufen oder ihn ins Licht einer Lampe locken, dort löst er sich auf.
+  function spawnStalker() {
+    stalker = { x: camX - 50, y: p.y - 30, life: 11, fade: 0, dying: false };
+    Sfx.play('whisper'); glitch = 0.4;
+  }
+  function stepHorror(dt) {
+    // Schatten
+    if (L.stalker && !boss && phase === 'play') {
+      if (!stalker) { stalkT -= dt; if (stalkT <= 0 && introT <= 0) spawnStalker(); }
+      else {
+        const s = stalker, tx = p.x + p.w / 2 - 14, ty = p.y + p.h - 70;
+        if (!s.dying) {
+          const sp = 108 + levelIdx * 14, dx = tx - s.x;
+          s.x += Math.sign(dx) * Math.min(Math.abs(dx), sp * dt); s.y += (ty - s.y) * Math.min(1, dt * 2.5);
+          s.life -= dt; if (s.life <= 0) s.dying = true;
+          if (blackout <= 0) for (const l of lamps) if (!l.broken && Math.abs(l.x - (s.x + 14)) < 50) { s.dying = true; Sfx.play('hiss'); burst(s.x + 14, s.y + 35, 20, '#000', 120, -60); }
+          if (overlap(p, s.x + 4, s.y + 6, 20, 64)) { hurt(s.x + 14); s.dying = true; Sfx.play('scream'); glitch = 0.5; }
+          if (Math.abs(dx) < 260) glitch = Math.max(glitch, 0.08);
+        } else { s.fade += dt * 1.6; if (s.fade >= 1) { stalker = null; stalkT = 15 + Math.random() * 12; } }
+      }
+    }
+    // Herzklopfen: wenn der Schatten nah ist oder nur noch 1 Herz
+    hbT -= dt;
+    const near = stalker && !stalker.dying ? Math.abs(stalker.x - p.x) : 1e9;
+    if (hbT <= 0 && (near < 600 || (p.hp === 1 && phase === 'play'))) { Sfx.play('heartbeat'); hbT = clamp(near / 450, 0.38, 0.95); }
+    // Stromausfall: alle Lampen gehen kurz aus
+    if (introT <= 0 && phase === 'play' && (!boss || bossPhase(boss) >= 2)) {
+      blackT -= dt;
+      if (blackT <= 0) { blackout = boss ? 1.0 : 1.4 + Math.random() * 0.8; blackT = boss ? 7 + Math.random() * 5 : 15 + Math.random() * 15; Sfx.play('powerdown'); }
+    }
+    if (blackout > 0) { blackout -= dt; if (blackout <= 0) Sfx.play('powerup'); }
+    // Jumpscare-Stellen
+    for (const sc of scares) if (!sc.done && p.x > sc.x && phase === 'play') { sc.done = true; scareT = 0.5; shake = 0.7; blackout = 1.3; Sfx.play('scream'); }
+    scareT -= dt; glitch = Math.max(0, glitch - dt);
   }
 
   // ---------- 4. Bosskampf: Johanal ----------
@@ -404,7 +468,7 @@
   const light = (x, y, r, a) => lights.push([x, y, r, a == null ? 1 : a]);
   function drawDark() {
     lctx.setTransform(0.5, 0, 0, 0.5, 0, 0); lctx.globalCompositeOperation = 'source-over';
-    lctx.clearRect(0, 0, VW, VH); lctx.fillStyle = 'rgba(2,3,8,' + L.dark + ')'; lctx.fillRect(0, 0, VW + 2, VH);
+    lctx.clearRect(0, 0, VW, VH); lctx.fillStyle = 'rgba(2,3,8,' + (blackout > 0 ? 0.97 : L.dark) + ')'; lctx.fillRect(0, 0, VW + 2, VH);
     lctx.globalCompositeOperation = 'destination-out';
     for (const [x, y, r, a] of lights) { const sx = x - camX; if (sx < -r || sx > VW + r) continue;
       const g = lctx.createRadialGradient(sx, y, 0, sx, y, r); g.addColorStop(0, 'rgba(0,0,0,' + a + ')'); g.addColorStop(0.45, 'rgba(0,0,0,' + a * 0.8 + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -428,7 +492,9 @@
     const c0 = Math.max(0, fl(cam / T) - 1), c1 = Math.min(W - 1, fl((cam + VW) / T) + 1);
     for (let r = 0; r < ROWS; r++) for (let c = c0; c <= c1; c++) { const t = grid[r][c]; if (t !== ' ') drawTile(t, c, r); if (t === '~') light(c * T + 16, r * T + 6, 70, 0.55); }
     // Lampen
-    for (const l of lamps) { const on = l.broken ? (hash(fl(time * 9), l.x) > 0.45 ? 1 : 0.15) : 0.92 + Math.sin(time * 40 + l.x) * 0.04;
+    for (const l of lamps) { let on = l.broken ? (hash(fl(time * 9), l.x) > 0.45 ? 1 : 0.15) : 0.92 + Math.sin(time * 40 + l.x) * 0.04;
+      if (stalker && Math.abs(stalker.x - l.x) < 240 && hash(fl(time * 22), l.x) < 0.55) on *= 0.06;   // Lampen flackern, wenn der Schatten nah ist
+      if (blackout > 0) on = 0;
       ctx.fillStyle = '#111'; ctx.fillRect(l.x - 1, T, 2, 8); ctx.fillStyle = '#333'; ctx.fillRect(l.x - 9, T + 6, 18, 5);
       ctx.fillStyle = theme.glow; ctx.globalAlpha = on; ctx.fillRect(l.x - 7, T + 10, 14, 3);
       const cg = ctx.createLinearGradient(0, T + 12, 0, FLOOR); cg.addColorStop(0, theme.glow); cg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -451,23 +517,68 @@
     for (const it of items) {
       if (it.type === 'o') { if (it.on) continue; const y = it.y + Math.sin(time * 4 + it.x) * 3; ctx.fillStyle = '#6fe3ff'; rr(ctx, it.x - 5, y - 6, 10, 12, 2); ctx.fill(); ctx.fillStyle = '#0c2a36'; ctx.fillRect(it.x - 3, y - 3, 6, 2); ctx.fillRect(it.x - 3, y + 1, 6, 2); light(it.x, y, 34, 0.55); }
       else if (it.type === 'h') { if (it.on) continue; const y = it.y + Math.sin(time * 3) * 2; ctx.fillStyle = '#ff5a6e'; ctx.beginPath(); ctx.arc(it.x - 4, y - 2, 5, 0, 7); ctx.arc(it.x + 4, y - 2, 5, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(it.x - 9, y); ctx.lineTo(it.x, y + 10); ctx.lineTo(it.x + 9, y); ctx.fill(); light(it.x, y, 46, 0.6); }
-      else if (it.type === 'K') { ctx.fillStyle = '#333'; ctx.fillRect(it.x - 2, it.y - 12, 4, 28); ctx.fillStyle = it.on ? '#8affc1' : '#665'; ctx.beginPath(); ctx.arc(it.x, it.y - 14, 6, 0, 7); ctx.fill(); light(it.x, it.y - 14, it.on ? 90 : 30, 0.7); }
+      else if (it.type === 'K') { ctx.fillStyle = it.on ? '#3a3f46' : '#c9ced6'; rr(ctx, it.x - 13, it.y - 18, 26, 34, 3); ctx.fill(); ctx.fillStyle = it.on ? '#55303a' : '#d43a3a'; ctx.fillRect(it.x - 3, it.y - 12, 6, 18); ctx.fillRect(it.x - 9, it.y - 6, 18, 6); light(it.x, it.y, it.on ? 30 : 80, 0.7); }
       else if (it.type === 'E') { ctx.fillStyle = '#0a0d12'; rr(ctx, it.x - 15, it.y - 36, 30, 52, 4); ctx.fill(); ctx.strokeStyle = '#8affc1'; ctx.lineWidth = 2; ctx.stroke();
         ctx.fillStyle = 'rgba(138,255,193,' + (0.25 + 0.15 * Math.sin(time * 3)) + ')'; ctx.fillRect(it.x - 11, it.y - 32, 22, 44); ctx.fillStyle = '#8affc1'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('EXIT', it.x, it.y - 40); light(it.x, it.y - 10, 110, 0.8); } }
+    // Leichen der Crew und Blutschrift (nur im Licht zu sehen)
+    for (const d of decor) {
+      if (d.x < cam - 150 || d.x > cam + VW + 150) continue;
+      if (d.type === 'b') {
+        ctx.fillStyle = 'rgba(70,6,8,.85)'; ctx.beginPath(); ctx.ellipse(d.x + 2, d.y - 1, 30, 4, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(70,6,8,.6)'; ctx.fillRect(d.x + 18, d.y - 2, 26, 2);
+        ctx.fillStyle = '#14161b'; ctx.fillRect(d.x - 27, d.y - 6, 13, 5);
+        ctx.fillStyle = d.col; rr(ctx, d.x - 15, d.y - 9, 24, 8, 3); ctx.fill();
+        ctx.fillStyle = '#a89a8c'; ctx.beginPath(); ctx.arc(d.x + 13, d.y - 5, 5, 0, 7); ctx.fill();
+        ctx.fillStyle = d.col; ctx.save(); ctx.translate(d.x + 2, d.y - 8); ctx.rotate(-0.6); ctx.fillRect(0, -2, 14, 4); ctx.restore();
+      } else {
+        ctx.save(); ctx.font = 'bold 17px Georgia, serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#7d1010'; ctx.globalAlpha = 0.9;
+        ctx.translate(d.x, d.y); ctx.rotate(-0.04); ctx.fillText(d.txt, 0, 0);
+        const w = ctx.measureText(d.txt).width;
+        for (let i = 0; i < d.txt.length; i++) { const hh = hash(i, d.x) ; if (hh < 0.45) ctx.fillRect(-w / 2 + (i + 0.5) * w / d.txt.length - 1, 2, 2, 4 + hh * 22); }
+        ctx.restore();
+      }
+    }
     // Gegner
     for (const e of enemies) { if (!e.alive) continue; const x = e.x + e.w / 2;
+      if (e.type === 'j') { const sq = e.ground ? 1 : 1.25;
+        ctx.fillStyle = '#c9b2a4'; ctx.beginPath(); ctx.ellipse(x, e.y + e.h - 9 * sq, 13 / sq, 10 * sq, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#8a6a60'; for (const lx of [-9, -4, 4, 9]) ctx.fillRect(x + lx - 1, e.y + e.h - 4, 2, 4 + (e.ground ? 0 : 3));
+        ctx.fillStyle = '#3a0a0a'; ctx.beginPath(); ctx.ellipse(x + e.dir * 4, e.y + e.h - 9, 6, e.ground ? 2 : 5, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#f3ead2'; for (let i = -2; i <= 2; i++) ctx.fillRect(x + e.dir * 4 + i * 2.2 - 0.6, e.y + e.h - 11, 1.2, 2.5);
+        ctx.fillStyle = '#111'; ctx.fillRect(x + e.dir * 6 - 1, e.y + e.h - 17, 2.5, 2.5); light(x, e.y + 10, 22, 0.35); continue; }
+      if (e.type === 'u') { const hang = e.st === 'hang';
+        if (hang) { ctx.strokeStyle = 'rgba(200,190,200,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, e.y + 4); ctx.stroke(); }
+        ctx.strokeStyle = '#2a1430'; ctx.lineWidth = 2; for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) { const k = Math.sin(time * (hang ? 3 : 14) + i) * 3;
+          ctx.beginPath(); ctx.moveTo(x, e.y + 10); ctx.lineTo(x + sd * (8 + i * 2), e.y + 4 + i * 3 + k); ctx.lineTo(x + sd * (12 + i * 2), e.y + (hang ? -2 : 20)); ctx.stroke(); }
+        ctx.fillStyle = '#3d1b45'; ctx.beginPath(); ctx.ellipse(x, e.y + 10, 10, 9, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#e9d8c8'; ctx.beginPath(); ctx.arc(x, e.y + (hang ? 13 : 8), 4, 0, 7); ctx.fill();
+        ctx.fillStyle = '#b00'; ctx.beginPath(); ctx.arc(x + (p.x > x ? 1.3 : -1.3), e.y + (hang ? 14 : 8), 1.8, 0, 7); ctx.fill(); continue; }
       if (e.type === 'c') { ctx.fillStyle = '#5a1e2c'; ctx.beginPath(); ctx.ellipse(x, e.y + 10, 13, 9, 0, Math.PI, 0); ctx.fill(); ctx.fillRect(e.x, e.y + 9, e.w, 5);
         ctx.strokeStyle = '#3a1019'; ctx.lineWidth = 2; for (let i = 0; i < 4; i++) { const lx = e.x + 3 + i * 6.5, k = Math.sin(time * 14 + i * 1.6) * 3; ctx.beginPath(); ctx.moveTo(lx, e.y + 13); ctx.lineTo(lx + k, e.y + 18); ctx.stroke(); }
         ctx.fillStyle = '#ff4040'; ctx.fillRect(x + e.dir * 6 - 1.5, e.y + 6, 3, 3); ctx.fillRect(x + e.dir * 1 - 1.5, e.y + 6, 3, 3); light(x, e.y + 6, 26, 0.5); }
       else { ctx.fillStyle = '#39424c'; rr(ctx, e.x, e.y + 3, e.w, 12, 5); ctx.fill(); ctx.fillStyle = '#f5c542'; ctx.beginPath(); ctx.arc(x, e.y + 9, 4, 0, 7); ctx.fill();
         ctx.fillStyle = 'rgba(200,220,255,.5)'; ctx.fillRect(e.x - 3, e.y + (fl(time * 30) % 2), 12, 2); ctx.fillRect(e.x + e.w - 9, e.y + (fl(time * 30 + 1) % 2), 12, 2); light(x, e.y + 9, 46, 0.6); } }
-    if (boss && !boss.dead) { drawBoss(boss); light(boss.x + boss.w / 2, boss.y + 30, 190, 0.75); }
+    if (stalker) { const s = stalker, a = 1 - s.fade, jit = () => (Math.random() - 0.5) * 2;
+      ctx.globalAlpha = a * 0.92; ctx.fillStyle = '#020204';
+      ctx.beginPath(); ctx.moveTo(s.x + 14 + jit(), s.y); ctx.quadraticCurveTo(s.x + 30, s.y + 20, s.x + 24 + jit(), s.y + 72);
+      ctx.lineTo(s.x + 4 + jit(), s.y + 72); ctx.quadraticCurveTo(s.x - 2, s.y + 20, s.x + 14, s.y); ctx.fill();
+      ctx.beginPath(); ctx.arc(s.x + 14 + jit(), s.y + 2, 8, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#020204'; ctx.lineWidth = 3; const reach = Math.sign(p.x - s.x) || 1;
+      for (const k of [0, 1]) { ctx.beginPath(); ctx.moveTo(s.x + 14, s.y + 18); ctx.quadraticCurveTo(s.x + 14 + reach * 20, s.y + 22 + k * 8, s.x + 14 + reach * (38 + k * 4) + jit() * 2, s.y + 30 + k * 10 + Math.sin(time * 9 + k) * 4); ctx.stroke(); }
+      ctx.globalAlpha = 1; }
+    if (boss && !boss.dead) { drawBoss(boss); if (blackout <= 0) light(boss.x + boss.w / 2, boss.y + 30, 190, 0.75); }
     // Spieler
     if (phase !== 'dead' && (p.inv <= 0 || fl(time * 18) % 2 || phase !== 'play')) drawChar(ctx, ch, p.x + p.w / 2, p.y + p.h, p.dir, p.runT, { run: p.ground && Math.abs(p.vx) > 20, air: !p.ground });
-    light(p.x + p.w / 2, p.y + p.h / 2 - 4, ch.light || 105, 0.95); light(p.x + p.w / 2 + p.dir * 70, p.y + p.h / 2, (ch.light || 105) * 0.8, 0.5);
+    const lampK = blackout > 0 ? 0.5 + 0.15 * Math.sin(time * 37) : 1;
+    light(p.x + p.w / 2, p.y + p.h / 2 - 4, (ch.light || 105) * lampK, 0.95); light(p.x + p.w / 2 + p.dir * 70, p.y + p.h / 2, (ch.light || 105) * 0.8 * lampK, 0.5);
     for (const q of parts) { ctx.globalAlpha = Math.min(1, q.life * 2); ctx.fillStyle = q.color; ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); } ctx.globalAlpha = 1;
     ctx.restore();
     drawDark();
+    // Augen, die im Dunkeln leuchten: der Schatten und Johanal beim Stromausfall
+    if (stalker) { const s = stalker, a = (1 - s.fade) * (0.75 + 0.25 * Math.sin(time * 11)); ctx.fillStyle = 'rgba(255,255,255,' + a + ')';
+      const ex = s.x + 14 - cam, ey = s.y + 1; ctx.fillRect(ex - 5, ey, 3, 2); ctx.fillRect(ex + 2, ey, 3, 2); }
+    if (boss && !boss.dead && blackout > 0) { ctx.fillStyle = '#ff2020'; const bx = boss.x + boss.w / 2 - cam;
+      for (const ox of [6, 17]) ctx.fillRect(bx + boss.dir * ox - 2, boss.y + boss.h - 88 * (boss.h / 92) - 2, 4, 4); }
     // Augen im Dunkeln (verschwinden, wenn man näher kommt)
     for (let i = fl(cam / 260); i < (cam + VW) / 260 + 1; i++) { if (hash(i, levelIdx + 7) > 0.5) continue; const ex = i * 260 + hash(i, 3) * 200, ey = 110 + hash(i, 5) * 150, d = Math.abs(ex - p.x);
       if (d < 190 || fl(time * 0.4 + hash(i, 9) * 9) % 5 === 0) continue; ctx.fillStyle = 'rgba(255,40,40,' + Math.min(0.75, (d - 190) / 200) + ')'; ctx.fillRect(ex - cam, ey, 2.5, 2); ctx.fillRect(ex - cam + 7, ey, 2.5, 2); }
@@ -475,11 +586,52 @@
     const vg = ctx.createRadialGradient(VW / 2, VH / 2, VH * 0.45, VW / 2, VH / 2, VW * 0.75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.6)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, VW, VH);
     if (hurtFlash > 0) { ctx.fillStyle = 'rgba(190,20,20,' + hurtFlash + ')'; ctx.fillRect(0, 0, VW, VH); }
     if (p.hp === 1 && phase === 'play') { ctx.fillStyle = 'rgba(160,0,0,' + (0.1 + 0.08 * Math.sin(time * 6)) + ')'; ctx.fillRect(0, 0, VW, VH); }
-    if (phase === 'dead') { ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.85, (1.3 - phaseT)) + ')'; ctx.fillRect(0, 0, VW, VH); }
+    // Filmkorn
+    ctx.fillStyle = 'rgba(255,255,255,.05)'; for (let i = 0; i < 140; i++) ctx.fillRect(Math.random() * VW, Math.random() * VH, 1, 1);
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; for (let i = 0; i < 60; i++) ctx.fillRect(Math.random() * VW, Math.random() * VH, 1.5, 1.5);
+    // Bildstörung, wenn der Schatten nah ist
+    if (glitch > 0 && Math.random() < 0.6) { ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (let i = 0; i < 3; i++) { const y = Math.random() * cv.height, h = 4 + Math.random() * 30; ctx.drawImage(cv, 0, y, cv.width, h, (Math.random() - 0.5) * 40, y, cv.width, h); }
+      ctx.setTransform(SC, 0, 0, SC, 0, 0); }
+    if (scareT > 0) drawScare();
+    if (phase === 'dead') { const k = Math.min(1, (2.2 - phaseT) / 0.6); ctx.fillStyle = 'rgba(25,0,0,' + Math.min(0.9, k) + ')'; ctx.fillRect(0, 0, VW, VH);
+      ctx.globalAlpha = k; ctx.textAlign = 'center'; ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px Georgia, serif'; ctx.fillText('DU BIST TOT', VW / 2 + (Math.random() - 0.5) * 3, VH * 0.45);
+      ctx.fillStyle = '#9aa3b3'; ctx.font = 'italic 13px Georgia, serif'; ctx.fillText('Das Deck beginnt von vorne …', VW / 2, VH * 0.45 + 28); ctx.globalAlpha = 1; }
     if (introT > 0) { const a = Math.min(1, introT / 0.8, (3.2 - introT) / 0.4); ctx.globalAlpha = a; ctx.textAlign = 'center';
       ctx.fillStyle = '#d8dde6'; ctx.font = 'bold 26px Georgia, serif'; ctx.fillText(L.name, VW / 2, VH * 0.36);
       ctx.fillStyle = '#9aa3b3'; ctx.font = '12px Georgia, serif'; ctx.fillText(L.sub.toUpperCase(), VW / 2, VH * 0.36 - 30);
       ctx.fillStyle = '#b55'; ctx.font = 'italic 13px Georgia, serif'; ctx.fillText(L.text, VW / 2, VH * 0.36 + 26); ctx.globalAlpha = 1; }
+  }
+
+  // Jumpscare: Johanals Gesicht füllt kurz den Bildschirm
+  function drawScare() {
+    const k = Math.min(1, scareT / 0.08), cx = VW / 2 + (Math.random() - 0.5) * 26, cy = VH * 0.55 + (Math.random() - 0.5) * 16, S = VH / 170;
+    ctx.fillStyle = 'rgba(8,0,0,' + 0.92 * k + ')'; ctx.fillRect(0, 0, VW, VH);
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(S, S); ctx.globalAlpha = k; ctx.rotate((Math.random() - 0.5) * 0.06);
+    // Kopf mit harter Seitenbeleuchtung
+    const fg = ctx.createRadialGradient(-30, -40, 10, 0, -10, 95); fg.addColorStop(0, '#d9a898'); fg.addColorStop(0.55, '#8a5a50'); fg.addColorStop(1, '#1a0806');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.ellipse(0, -10, 82, 80, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#3a1410'; ctx.lineWidth = 3; for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.moveTo(-10 + i * 5, -88); ctx.lineTo(-24 + i * 9, -118 - (i % 2) * 8); ctx.stroke(); }   // Haarknoten
+    // tiefe Augenhöhlen, blutunterlaufene Glubschaugen, winzige Pupillen
+    for (const ex of [-33, 33]) {
+      ctx.fillStyle = 'rgba(20,0,0,.85)'; ctx.beginPath(); ctx.ellipse(ex, -30, 34, 30, 0, 0, 7); ctx.fill();
+      const eg = ctx.createRadialGradient(ex, -30, 4, ex, -30, 26); eg.addColorStop(0, '#fffaf0'); eg.addColorStop(0.7, '#f0d8c8'); eg.addColorStop(1, '#a03030');
+      ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(ex, -30, 25, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(170,0,0,.8)'; ctx.lineWidth = 1.2;
+      for (let v = 0; v < 9; v++) { const a = v / 9 * 6.28 + ex; ctx.beginPath(); ctx.moveTo(ex + Math.cos(a) * 24, -30 + Math.sin(a) * 24); ctx.quadraticCurveTo(ex + Math.cos(a + 0.3) * 15, -30 + Math.sin(a + 0.3) * 15, ex + Math.cos(a) * 9, -30 + Math.sin(a) * 9); ctx.stroke(); }
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ex + (Math.random() - 0.5) * 4, -29, 3.5, 0, 7); ctx.fill();
+    }
+    // aufgerissene Kiefer-Platte, schief
+    ctx.save(); ctx.rotate(0.06); ctx.fillStyle = '#7a4a40'; rr(ctx, -72, 18, 144, 70, 6); ctx.fill();
+    ctx.fillStyle = '#120202'; ctx.fillRect(-64, 20, 128, 44);
+    ctx.fillStyle = '#d8ccae'; for (let i = 0; i < 10; i++) { ctx.fillRect(-62 + i * 12.6, 20, 9, 14 + hash(i, 1) * 6); ctx.fillRect(-62 + i * 12.6, 50 - hash(i, 2) * 6, 9, 14 + hash(i, 2) * 6); }
+    ctx.fillStyle = 'rgba(110,0,0,.7)'; for (let i = 0; i < 5; i++) ctx.fillRect(-55 + i * 27, 34, 3, 10 + hash(i, 4) * 26);
+    ctx.restore();
+    ctx.restore(); ctx.globalAlpha = 1;
+    // Rotstich, Streifen, Rauschen
+    ctx.fillStyle = 'rgba(140,0,0,' + 0.25 * k + ')'; ctx.fillRect(0, 0, VW, VH);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; for (let y = 0; y < VH; y += 3) ctx.fillRect(0, y, VW, 1);
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; for (let i = 0; i < 300; i++) ctx.fillRect(Math.random() * VW, Math.random() * VH, 1.5, 1.5);
   }
 
   // ---------- 6. Menü und Ablauf ----------
@@ -488,6 +640,7 @@
     if (phase === 'play') stepPlayer(dt);
     stepWorld(dt);
     if (phase === 'play' || phase === 'dead') stepBoss(dt);
+    stepHorror(dt);
     if (phase === 'dead') { phaseT -= dt; if (phaseT <= 0) respawn(); }
     for (const q of parts) { q.life -= dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
     if (parts.length > 300) parts.splice(0, parts.length - 300);
@@ -555,5 +708,5 @@
   // Für Tests
   window.__g = { start: startLevel, sim(n, k) { Object.assign(keys, { l: false, r: false, j: false }, k || {}); for (let i = 0; i < n; i++) step(STEP); },
     press() { jPressed = true; }, get p() { return p; }, get boss() { return boss; }, get phase() { return phase; }, get W() { return W; }, tile, solid,
-    get plats() { return plats; }, get items() { return items; }, set god(v) { god = v; }, get time() { return time; }, get deaths() { return deaths; }, keys };
+    get plats() { return plats; }, get items() { return items; }, set god(v) { god = v; }, get time() { return time; }, get deaths() { return deaths; }, get stalker() { return stalker; }, get enemies() { return enemies; }, spawnStalker, scare() { scareT = 0.5; }, black(v) { blackout = v; }, keys };
 })();
