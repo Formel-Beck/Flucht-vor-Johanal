@@ -13,8 +13,9 @@
 //    M  schwebende Plattform (fährt hin und her)
 //    x  bröckelnde Platte
 //    c  Krabbler   d  Drohne          (draufspringen = besiegt)
+//    C  Checkpoint (nach dem Tod hier weitermachen)
 //    j  Springer (springt dich an)   u  Lauerer (hängt an der Decke, fällt herunter)
-//    b  Leiche     w  Blutschrift    J  Schreck-Stelle (unsichtbar)
+//    b  Leiche     w  Blutschrift   (Schreckmomente kommen zufällig)
 //    o  Datenchip  h  Herz   K  Med-Station (füllt alle Herzen)   E  Ausgang
 //    l  Lampe      P  Start  B  Johanal
 //
@@ -56,7 +57,7 @@
     tunnel:     mk(12, { 1: full, 2: full, 3: full, 4: full, 5: full, 6: full, 9: '     c' }),
     plateau:    mk(14, { 6: '      oo', 8: '    ######', 9: '  ########' }),
     hochweg:    mk(14, { 4: '      oo', 6: '      ==', 8: '   ==    ==', 9: '   ^^^^^^^^' }),
-    checkpoint: mk(7,  { 2: '   l', 9: '   K' }),
+    checkpoint: mk(10, { 2: '    l', 9: '  C    K' }),   // Checkpoint + Med-Station
     // --- dichtere Stücke mit neuen Gegnern und Horror ---
     leichenhalle: mk(15, { 1: '     u     u', 4: '   w', 9: '  b    c     b' }),
     lauerGang:  mk(14, { 1: '  u    u    u', 8: '      o', 9: '  c         c' }),
@@ -67,7 +68,7 @@
     tentakelGrube: mk(14, { 1: '      u', 9: '' }, ['##t#t####t#t##', full]),
     turm:       mk(15, { 3: '         oo', 4: '         ==', 6: '     ==     d', 8: '  ==' }, ['##^^^^^^^^^####', full]),
     stachelGang: mk(14, { 7: '    o    o', 9: '  c ^^ c ^^  j' }),
-    schatten:   mk(16, { 3: '       w', 9: '  b       J    b' }),
+    schatten:   mk(16, { 3: '       w', 9: '  b            b' }),
     gruft:      mk(15, { 1: '   u       u', 5: '         w', 9: '   j   b   c' }, ['######   ######', '######   ######']),
     herz:       mk(7,  { 7: '   h', 8: '   =' }),
     ziel:       mk(9,  { 2: '     l', 9: '     E' }),
@@ -80,11 +81,11 @@
     { name: 'Frachtraum', sub: 'Deck 3', theme: 'cargo', dark: 0.7,
       text: 'Das Licht ist ausgefallen. Irgendwo über dir schleift etwas über den Boden.',
       chunks: ['start', 'gang', 'kisten', 'krabbler', 'grube', 'stacheln', 'leichenhalle', 'krabbler2', 'springerGrube', 'checkpoint',
-               'kisten', 'grubeBreit', 'lauerGang', 'stachelGang', 'herz', 'saeure', 'schatten', 'krabbler', 'plateau', 'gruft', 'ziel'] },
+               'kisten', 'grubeBreit', 'lauerGang', 'stachelGang', 'herz', 'saeure', 'checkpoint', 'schatten', 'krabbler', 'plateau', 'gruft', 'ziel'] },
     { name: 'Wartungsschächte', sub: 'Deck 2', theme: 'maint', dark: 0.74,
       text: 'Die Leitungen zischen. Etwas atmet hinter dir.', stalker: true,
       chunks: ['start', 'gang', 'dampf', 'lauerGang', 'tunnel', 'grube', 'schwebe', 'dampfKrabbler', 'checkpoint', 'stachelKisten', 'drohne',
-               'schatten', 'broeckel', 'springerGrube', 'herz', 'hochweg', 'turm', 'gruft', 'dampfKrabbler', 'ziel'] },
+               'schatten', 'broeckel', 'springerGrube', 'herz', 'checkpoint', 'hochweg', 'turm', 'gruft', 'dampfKrabbler', 'ziel'] },
     { name: 'Reaktor', sub: 'Deck 2 – Kern', theme: 'reactor', dark: 0.72,
       text: 'Der Reaktor läuft noch. Niemand hat ihn eingeschaltet.', stalker: true,
       chunks: ['start', 'laser', 'saeure', 'laserDrohne', 'schwebe', 'drohne', 'checkpoint', 'saeureSpringer', 'leichenhalle', 'laser', 'broeckel',
@@ -93,7 +94,7 @@
       text: 'Die Wände atmen. Er weiss, dass du kommst.', stalker: true,
       chunks: ['start', 'tentakel', 'krabbler2', 'schatten', 'hochweg', 'tentakelGrube', 'lauerGang', 'checkpoint', 'drohneGrube', 'broeckel', 'tunnel',
                'leichenhalle', 'tentakel', 'saeureSpringer', 'herz', 'checkpoint', 'laserDrohne', 'schwebe', 'tentakelGrube', 'springerGrube',
-               'stachelGang', 'dampfKrabbler', 'gruft', 'schatten', 'ziel'] },
+               'stachelGang', 'checkpoint', 'dampfKrabbler', 'gruft', 'schatten', 'ziel'] },
     { name: 'Die Brücke', sub: 'Deck 1 – Johanal', theme: 'bridge', dark: 0.62, boss: true,
       text: '«Du bist spät dran.»',
       chunks: ['bossarena'] }

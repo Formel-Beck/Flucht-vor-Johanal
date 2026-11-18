@@ -61,7 +61,7 @@
   #overText { line-height: 1.6; margin-bottom: 14px; }
   #over .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   #over button { padding: 10px 18px; border-radius: 10px; border: 1px solid #39424f; background: #141a26; font-size: 15px; }
-  #overNext, #overResume { border-color: #8affc1 !important; }
+  #overNext, #overResume, #overCheck { border-color: #8affc1 !important; }
   #rotate { display: none; justify-content: center; background: #05070c; z-index: 50; font-size: 18px; text-align: center; padding: 30px; }
   #err { position: fixed; left: 8px; bottom: 8px; right: 8px; color: #ff8a8a; font: 12px monospace; z-index: 99; white-space: pre-wrap; pointer-events: none; }
 </style>
@@ -88,7 +88,7 @@
   <div id="charGrid"></div>
   <h2>DECK</h2>
   <div id="lvlGrid"></div>
-  <div class="help">Handy: links ◀ ▶ laufen, rechts springen (länger drücken = höher) · Tastatur: Pfeile oder A/D, Leertaste · Auf Gegner draufspringen · Vor dem Schatten wegrennen – Licht vertreibt ihn</div>
+  <div class="help">Handy: links ◀ ▶ laufen, rechts springen (länger drücken = höher) · Tastatur: Pfeile oder A/D, Leertaste · Auf Gegner draufspringen · 5 Leben · ⚑ Checkpoints · Vor dem Schatten wegrennen – Licht vertreibt ihn</div>
 </div>
 <button id="muteBtn">🔊</button>
 
@@ -97,7 +97,8 @@
   <div id="overText"></div>
   <div class="row">
     <button id="overNext">Weiter ▶</button><button id="overResume">Weiter ▶</button>
-    <button id="overRetry">Nochmal</button><button id="overMenu">Menü</button>
+    <button id="overCheck">⚑ Am Checkpoint weiter</button>
+    <button id="overRetry">Nochmal</button><button id="overMenu">Hauptmenü</button>
   </div>
 </div>
 <div id="rotate">📱↻<br><br>Bitte das Handy quer halten</div>

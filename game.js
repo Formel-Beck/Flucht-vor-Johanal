@@ -67,7 +67,7 @@
 
   // ---------- 2. Level laden ----------
   let L = null, levelIdx = 0, theme = THEMES.cargo, grid = [], W = 0;
-  let decor = [], scares = [], stalker = null, stalkT = 0, hbT = 0, blackT = 0, blackout = 0, scareT = 0, glitch = 0;
+  let decor = [], checks = [], checkAt = null, scareNext = 0, stalker = null, stalkT = 0, hbT = 0, blackT = 0, blackout = 0, scareT = 0, glitch = 0;
   let p = null, ch = CHARS[0], items = [], lamps = [], enemies = [], plats = [], vents = [], lasers = [], tents = [], crumble = {}, parts = [];
   let boss = null, spawn = { x: 0, y: 0 }, lastSafe = { x: 0, y: 0 }, camX = 0, time = 0, deaths = 0, chips = 0, chipsTotal = 0;
   let phase = 'menu', phaseT = 0, shake = 0, hurtFlash = 0, introT = 0, god = false;
@@ -82,10 +82,10 @@
     W = rows[0].length; grid = rows.map(r => r.split(''));
     for (let r = 0; r < ROWS; r++) { grid[r][0] = '#'; grid[r][W - 1] = '#'; }      // Wände an beiden Enden
     items = []; lamps = []; enemies = []; plats = []; vents = []; lasers = []; tents = []; crumble = {}; parts = []; boss = null;
-    decor = []; scares = []; stalker = null; stalkT = 14 + Math.random() * 8; blackT = 10 + Math.random() * 10; blackout = 0; scareT = 0;
+    decor = []; checks = []; checkAt = null; scareNext = 30 + Math.random() * 35; stalker = null; stalkT = 14 + Math.random() * 8; blackT = 10 + Math.random() * 10; blackout = 0; scareT = 0;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < W; c++) {
       const t = grid[r][c], x = c * T, y = r * T;
-      if ('PohKElcdMBjubwJ'.includes(t)) grid[r][c] = ' ';
+      if ('PohKElcdMBjubwJC'.includes(t)) grid[r][c] = ' ';
       if (t === 'P') spawn = { x: x + 6, y: y };
       else if (t === 'o' || t === 'h' || t === 'K' || t === 'E') items.push({ type: t, x: x + T / 2, y: y + T / 2, on: false });
       else if (t === 'l') lamps.push({ x: x + T / 2, y: T + 6, broken: hash(c, i) < 0.3 });
@@ -94,7 +94,7 @@
       else if (t === 'u') enemies.push({ type: 'u', x: x + 4, y: T, hy: T, w: 24, h: 20, vy: 0, dir: -1, st: 'hang', alive: true });
       else if (t === 'b') decor.push({ type: 'b', x: x + T / 2, y: y + T, col: ['#e86a2a', '#556b2f', '#8a96a4', '#6b4a8a'][fl(hash(c, i) * 4)] });
       else if (t === 'w') decor.push({ type: 'w', x: x + T / 2, y: y + T / 2, txt: WRITING[fl(hash(c, i + 3) * WRITING.length)] });
-      else if (t === 'J') scares.push({ x: x, done: false });
+      else if (t === 'C') checks.push({ x: x + T / 2, y: y + T, on: false });
       else if (t === 'd') enemies.push({ type: 'd', x: x, y: y + 6, w: 26, h: 18, hx: x, hy: y + 6, ph: c, alive: true });
       else if (t === 'M') plats.push({ x: x, y: y, w: 64, h: 12, hx: x, range: 96, ph: c * 0.7, dx: 0 });
       else if (t === 'S') vents.push({ c, r });
@@ -109,7 +109,7 @@
   function resetPlayer(at) {
     ch = CHARS.find(c => c.id === save.char) || CHARS[0];
     const h = ch.h || 28;
-    p = { x: at.x, y: at.y + T - h - 0.01, w: 18, h, vx: 0, vy: 0, ground: false, dir: 1, coy: 0, buf: 0, jumps: 0, hp: ch.hp || 3, inv: 1, ride: null, runT: 0, safeT: 0 };
+    p = { x: at.x, y: at.y + T - h - 0.01, w: 18, h, vx: 0, vy: 0, ground: false, dir: 1, coy: 0, buf: 0, jumps: 0, hp: ch.hp || 5, inv: 1, ride: null, runT: 0, safeT: 0 };
     lastSafe = { x: p.x, y: p.y };
   }
 
@@ -143,12 +143,23 @@
     else { p.vy = -330; p.vx = (p.x + p.w / 2 < fromX ? -1 : 1) * 200; }
     return true;
   }
-  function die() { Sfx.play('die'); deaths++; phase = 'dead'; phaseT = 2.2; stalker = null; }
-  // Alle Herzen verloren: das ganze Deck beginnt von vorne (Gegner, Chips, Med-Stationen – alles zurück)
-  function respawn() {
-    const d = deaths; loadLevel(levelIdx); deaths = d; introT = 0;
-    phase = 'play'; updateHud(); updateBossBar();
+  function die() { Sfx.play('die'); deaths++; phase = 'dead'; phaseT = 2.0; stalker = null; }
+  // Alle Leben verloren: Auswahl – am Checkpoint weiter, Level neu oder Hauptmenü
+  function showDeathMenu() {
+    phase = 'gameover';
+    $('overTitle').textContent = 'Du bist tot';
+    $('overText').textContent = checkAt ? 'Du kannst am letzten Checkpoint weitermachen.' : (L.boss ? 'Johanal wartet.' : 'Noch kein Checkpoint erreicht.');
+    $('overNext').style.display = 'none'; $('overResume').style.display = 'none';
+    $('overCheck').style.display = checkAt ? '' : 'none'; $('overRetry').style.display = ''; $('overRetry').textContent = L.boss ? 'Bosskampf neu' : 'Level neu starten';
+    $('over').style.display = 'flex'; $('touch').style.display = 'none';
   }
+  // Am Checkpoint weiter: Spieler mit vollen Leben dorthin, der Rest des Levels bleibt wie er war
+  function respawnAtCheck() {
+    resetPlayer(checkAt); stalker = null; stalkT = 12 + Math.random() * 8; blackout = 0; scareT = 0;
+    camX = clamp(p.x - VW * 0.42, 0, Math.max(0, W * T - VW));
+    phase = 'play'; $('over').style.display = 'none'; $('touch').style.display = 'block'; updateHud();
+  }
+
 
   function stepPlayer(dt) {
     if (p.ride) { p.x += p.ride.dx; }
@@ -236,12 +247,17 @@
       if (s === 'on' && cyc(v.c, 2.8) < 0.5 + dt * 1.5 && Math.abs(v.c * T - p.x) < 420) Sfx.play('steam'); }
     for (const l of lasers) if (laserOn(l) === 'on' && overlap(p, l.c * T + 12, (l.r + 1) * T, 8, l.len)) hurt(l.c * T + 16);
     for (const t of tents) { const h = tentH(t); if (h > 20 && overlap(p, t.c * T + 9, t.r * T - h, 14, h)) hurt(t.c * T + 16); }
+    // Checkpoints
+    for (const c of checks) if (!c.on && overlap(p, c.x - 14, c.y - 60, 28, 60)) {
+      for (const o of checks) o.on = false; c.on = true; checkAt = { x: c.x - 9, y: c.y - T };
+      Sfx.play('check'); burst(c.x, c.y - 44, 16, '#8affc1', 130, 0); toast('Checkpoint');
+    }
     // Dinge einsammeln
     for (const it of items) {
       if (it.on || !overlap(p, it.x - 10, it.y - 12, 20, 26)) continue;
       if (it.type === 'o') { it.on = true; chips++; Sfx.play('chip'); burst(it.x, it.y, 6, '#6fe3ff', 90, 0); updateHud(); }
-      else if (it.type === 'h') { if (p.hp < (ch.hp || 3)) { it.on = true; p.hp++; Sfx.play('heart'); burst(it.x, it.y, 8, '#ff5a6e', 90, 0); updateHud(); } }
-      else if (it.type === 'K') { it.on = true; p.hp = ch.hp || 3; Sfx.play('check'); burst(it.x, it.y, 14, '#ff5a6e', 120, 0); toast('Med-Station: Herzen aufgefüllt'); updateHud(); }
+      else if (it.type === 'h') { if (p.hp < (ch.hp || 5)) { it.on = true; p.hp++; Sfx.play('heart'); burst(it.x, it.y, 8, '#ff5a6e', 90, 0); updateHud(); } }
+      else if (it.type === 'K') { it.on = true; p.hp = ch.hp || 5; Sfx.play('check'); burst(it.x, it.y, 14, '#ff5a6e', 120, 0); toast('Med-Station: Herzen aufgefüllt'); updateHud(); }
       else if (it.type === 'E') { levelDone(); return; }
     }
   }
@@ -280,7 +296,11 @@
     }
     if (blackout > 0) { blackout -= dt; if (blackout <= 0) Sfx.play('powerup'); }
     // Jumpscare-Stellen
-    for (const sc of scares) if (!sc.done && p.x > sc.x && phase === 'play') { sc.done = true; scareT = 0.5; shake = 0.7; blackout = 1.3; Sfx.play('scream'); }
+    // Jumpscares kommen zufällig (nicht im ersten Abschnitt, nicht beim Boss): etwa alle 30–75 Sekunden
+    if (!boss && phase === 'play' && introT <= 0 && p.x > 14 * T) {
+      scareNext -= dt;
+      if (scareNext <= 0 && Math.random() < dt * 3) { scareT = 0.5; shake = 0.7; blackout = 1.3; Sfx.play('scream'); scareNext = 30 + Math.random() * 45; }
+    }
     scareT -= dt; glitch = Math.max(0, glitch - dt);
   }
 
@@ -520,6 +540,12 @@
       else if (it.type === 'K') { ctx.fillStyle = it.on ? '#3a3f46' : '#c9ced6'; rr(ctx, it.x - 13, it.y - 18, 26, 34, 3); ctx.fill(); ctx.fillStyle = it.on ? '#55303a' : '#d43a3a'; ctx.fillRect(it.x - 3, it.y - 12, 6, 18); ctx.fillRect(it.x - 9, it.y - 6, 18, 6); light(it.x, it.y, it.on ? 30 : 80, 0.7); }
       else if (it.type === 'E') { ctx.fillStyle = '#0a0d12'; rr(ctx, it.x - 15, it.y - 36, 30, 52, 4); ctx.fill(); ctx.strokeStyle = '#8affc1'; ctx.lineWidth = 2; ctx.stroke();
         ctx.fillStyle = 'rgba(138,255,193,' + (0.25 + 0.15 * Math.sin(time * 3)) + ')'; ctx.fillRect(it.x - 11, it.y - 32, 22, 44); ctx.fillStyle = '#8affc1'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('EXIT', it.x, it.y - 40); light(it.x, it.y - 10, 110, 0.8); } }
+    // Checkpoints: Signalmast, leuchtet grün, wenn aktiv
+    for (const c of checks) { ctx.fillStyle = '#2a3038'; ctx.fillRect(c.x - 2, c.y - 54, 4, 54); ctx.fillRect(c.x - 9, c.y - 4, 18, 4);
+      const col = c.on ? '#8affc1' : '#7a3030', pulse = c.on ? 0.8 + 0.2 * Math.sin(time * 4) : 0.4 + 0.4 * (fl(time * 2) % 2);
+      ctx.globalAlpha = pulse; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(c.x, c.y - 56, 6, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      if (c.on) { ctx.fillStyle = 'rgba(138,255,193,.85)'; ctx.beginPath(); ctx.moveTo(c.x + 2, c.y - 50); ctx.lineTo(c.x + 20 + Math.sin(time * 5) * 2, c.y - 45); ctx.lineTo(c.x + 2, c.y - 40); ctx.fill(); }
+      light(c.x, c.y - 50, c.on ? 110 : 50, 0.7); }
     // Leichen der Crew und Blutschrift (nur im Licht zu sehen)
     for (const d of decor) {
       if (d.x < cam - 150 || d.x > cam + VW + 150) continue;
@@ -594,9 +620,9 @@
       for (let i = 0; i < 3; i++) { const y = Math.random() * cv.height, h = 4 + Math.random() * 30; ctx.drawImage(cv, 0, y, cv.width, h, (Math.random() - 0.5) * 40, y, cv.width, h); }
       ctx.setTransform(SC, 0, 0, SC, 0, 0); }
     if (scareT > 0) drawScare();
-    if (phase === 'dead') { const k = Math.min(1, (2.2 - phaseT) / 0.6); ctx.fillStyle = 'rgba(25,0,0,' + Math.min(0.9, k) + ')'; ctx.fillRect(0, 0, VW, VH);
-      ctx.globalAlpha = k; ctx.textAlign = 'center'; ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px Georgia, serif'; ctx.fillText('DU BIST TOT', VW / 2 + (Math.random() - 0.5) * 3, VH * 0.45);
-      ctx.fillStyle = '#9aa3b3'; ctx.font = 'italic 13px Georgia, serif'; ctx.fillText('Das Deck beginnt von vorne …', VW / 2, VH * 0.45 + 28); ctx.globalAlpha = 1; }
+    if (phase === 'dead' || phase === 'gameover') { const k = phase === 'gameover' ? 1 : Math.min(1, (2.0 - phaseT) / 0.6); ctx.fillStyle = 'rgba(25,0,0,' + Math.min(0.9, k) + ')'; ctx.fillRect(0, 0, VW, VH);
+      ctx.globalAlpha = k; ctx.textAlign = 'center'; ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px Georgia, serif'; if (phase === 'dead') ctx.fillText('DU BIST TOT', VW / 2 + (Math.random() - 0.5) * 3, VH * 0.45);
+      ctx.globalAlpha = 1; }
     if (introT > 0) { const a = Math.min(1, introT / 0.8, (3.2 - introT) / 0.4); ctx.globalAlpha = a; ctx.textAlign = 'center';
       ctx.fillStyle = '#d8dde6'; ctx.font = 'bold 26px Georgia, serif'; ctx.fillText(L.name, VW / 2, VH * 0.36);
       ctx.fillStyle = '#9aa3b3'; ctx.font = '12px Georgia, serif'; ctx.fillText(L.sub.toUpperCase(), VW / 2, VH * 0.36 - 30);
@@ -641,7 +667,7 @@
     stepWorld(dt);
     if (phase === 'play' || phase === 'dead') stepBoss(dt);
     stepHorror(dt);
-    if (phase === 'dead') { phaseT -= dt; if (phaseT <= 0) respawn(); }
+    if (phase === 'dead') { phaseT -= dt; if (phaseT <= 0) showDeathMenu(); }
     for (const q of parts) { q.life -= dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
     if (parts.length > 300) parts.splice(0, parts.length - 300);
     parts = parts.filter(q => q.life > 0);
@@ -654,8 +680,9 @@
     const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
     if (phase === 'play' || phase === 'dead') { accT += dt; while (accT >= STEP) { step(STEP); accT -= STEP; } }
     if (L) draw();
+    if (phase === 'gameover') time += dt;
   }
-  function updateHud() { $('hearts').textContent = '♥'.repeat(Math.max(0, p.hp)) + '♡'.repeat(Math.max(0, (ch.hp || 3) - p.hp)); $('chips').textContent = chipsTotal ? '▣ ' + chips + '/' + chipsTotal : ''; }
+  function updateHud() { $('hearts').textContent = '♥'.repeat(Math.max(0, p.hp)) + '♡'.repeat(Math.max(0, (ch.hp || 5) - p.hp)); $('chips').textContent = chipsTotal ? '▣ ' + chips + '/' + chipsTotal : ''; }
   let toastT = null;
   function toast(txt) { const t = $('toast'); t.textContent = txt; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
   const fmt = s => fl(s / 60) + ':' + String(fl(s % 60)).padStart(2, '0') + '.' + fl(s * 10 % 10);
@@ -673,12 +700,12 @@
     $('overTitle').textContent = lastLvl ? 'Johanal ist besiegt' : 'Deck geschafft';
     $('overText').innerHTML = (lastLvl ? 'Die Marienfeld ist still. Für den Moment.<br><br>' : '') +
       'Zeit: <b>' + fmt(time) + '</b>' + (isBest ? ' (Bestzeit!)' : '') + '<br>Datenchips: <b>' + chips + ' / ' + chipsTotal + '</b><br>Tode: <b>' + deaths + '</b>';
-    $('overNext').style.display = lastLvl ? 'none' : ''; $('overResume').style.display = 'none'; $('overRetry').style.display = '';
+    $('overNext').style.display = lastLvl ? 'none' : ''; $('overResume').style.display = 'none'; $('overRetry').style.display = ''; $('overCheck').style.display = 'none'; $('overRetry').textContent = 'Nochmal';
     $('over').style.display = 'flex'; $('touch').style.display = 'none';
   }
   function togglePause() {
     if (phase === 'play') { phase = 'pause'; $('overTitle').textContent = 'Pause'; $('overText').textContent = L.name + ' · ' + L.sub;
-      $('overNext').style.display = 'none'; $('overResume').style.display = ''; $('overRetry').style.display = ''; $('over').style.display = 'flex'; }
+      $('overNext').style.display = 'none'; $('overResume').style.display = ''; $('overRetry').style.display = ''; $('overCheck').style.display = 'none'; $('overRetry').textContent = 'Nochmal'; $('over').style.display = 'flex'; }
     else if (phase === 'pause') { phase = 'play'; $('over').style.display = 'none'; }
   }
   function showMenu() {
@@ -696,6 +723,7 @@
   }
   $('overNext').onclick = () => startLevel(levelIdx + 1);
   $('overRetry').onclick = () => startLevel(levelIdx);
+  $('overCheck').onclick = respawnAtCheck;
   $('overResume').onclick = togglePause;
   $('overMenu').onclick = showMenu;
   $('pauseBtn').onclick = togglePause;
@@ -708,5 +736,5 @@
   // Für Tests
   window.__g = { start: startLevel, sim(n, k) { Object.assign(keys, { l: false, r: false, j: false }, k || {}); for (let i = 0; i < n; i++) step(STEP); },
     press() { jPressed = true; }, get p() { return p; }, get boss() { return boss; }, get phase() { return phase; }, get W() { return W; }, tile, solid,
-    get plats() { return plats; }, get items() { return items; }, set god(v) { god = v; }, get time() { return time; }, get deaths() { return deaths; }, get stalker() { return stalker; }, get enemies() { return enemies; }, spawnStalker, scare() { scareT = 0.5; }, black(v) { blackout = v; }, keys };
+    get plats() { return plats; }, get items() { return items; }, set god(v) { god = v; }, get time() { return time; }, get deaths() { return deaths; }, get stalker() { return stalker; }, get enemies() { return enemies; }, spawnStalker, get checkAt() { return checkAt; }, get checks() { return checks; }, respawnAtCheck, get scareT() { return scareT; }, scare() { scareT = 0.5; }, black(v) { blackout = v; }, keys };
 })();

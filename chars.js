@@ -5,14 +5,14 @@
 //    light = wie weit ihre Lampe leuchtet (Standard 105)
 //    jump  = Sprungkraft (Standard 660)
 //    speed = Lauftempo (Standard 200)
-//    hp    = Herzen (Standard 3)
+//    hp    = Leben/Herzen (Standard 5)
 //    dbl   = Doppelsprung, glide = Schweben (Sprung halten)
 //    h     = Körperhöhe für Kollisionen (Standard 28)
 // =====================================================
 window.CHARS = [
   { id: 'orla', name: 'Orla Venn', info: 'Funkerin. Ihre Stirnlampe leuchtet viel weiter.', color: '#e86a2a', light: 170 },
   { id: 'locken', name: 'Der Lockenkopf', info: 'Springt am höchsten.', color: '#8e44ad', jump: 730 },
-  { id: 'waechter', name: 'Der Wächter', info: 'Hält 5 Treffer aus, ist aber langsamer.', color: '#6b8e23', hp: 5, speed: 172 },
+  { id: 'waechter', name: 'Der Wächter', info: 'Hat 7 statt 5 Leben, ist aber langsamer.', color: '#6b8e23', hp: 7, speed: 172 },
   { id: 'maske', name: 'Der Maskierte', info: 'Rennt am schnellsten.', color: '#3a3d46', speed: 240 },
   { id: 'katze', name: 'Die grüne Katze', info: 'Klein und kann in der Luft ein zweites Mal springen.', color: '#43a047', dbl: true, h: 20 },
   { id: 'geist', name: 'Der Geist', info: 'Sprung gedrückt halten = langsam schweben.', color: '#9fc4e0', glide: true }

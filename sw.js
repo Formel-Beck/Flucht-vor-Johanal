@@ -1,6 +1,6 @@
 // Service Worker: speichert das Spiel auf dem Handy, damit es auch ohne Internet läuft.
 // Bei jeder neuen Version die Nummer erhöhen – dann aktualisiert sich die App von selbst.
-const VERSION = 'flucht-v2';
+const VERSION = 'flucht-v3';
 const FILES = ['./', 'index.html', 'chars.js', 'levels.js', 'audio.js', 'game.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(VERSION).then(c => Promise.all(FILES.map(f => fetch(f, { cache: 'reload' }).then(r => c.put(f, r)))))); });
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())));
