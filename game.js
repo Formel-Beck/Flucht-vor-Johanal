@@ -32,6 +32,40 @@
   // Blutschrift an den Wänden (zufällig gewählt, pro Stelle immer gleich)
   const WRITING = ['ER SIEHT DICH', 'LAUF', 'NICHT UMDREHEN', 'WIR HABEN ES GEWECKT', 'BECK GROUP LÜGT', 'ES IST IN DEN WÄNDEN',
     'ZÄHL DIE LICHTER', 'ER WAR EINER VON UNS', 'HILFE', 'NICHT INS DUNKLE', 'ER HÖRT DICH', 'KEINER KOMMT RAUS'];
+  // Todes-Sprüche: nach jedem Tod wird zufällig einer gewählt (nie zweimal derselbe hintereinander)
+  const DEATH_TEXTS = [
+    'Du wurdest von Johanal aufgegessen',
+    'Johanals Gase haben dich verätzt',
+    'Die Tentakel ist da rein, wo du sie nicht haben wolltest',
+    'Du bist in Johanals Schiss stecken geblieben',
+    'Johanal hat dich mit dem Rüssel zum Frühstück geschlürft',
+    'Du wurdest Teil der Wucherung',
+    'Die Beck Group bedankt sich für deine Dienste',
+    'Johanal hat dich zwischen seinen Kiefer-Zähnen vergessen',
+    'Der Schatten hat dich umarmt. Für immer.',
+    'Du riechst jetzt genauso wie Johanal',
+    'Die Krabbler haben ein Festmahl',
+    'Johanal hat sich auf dich gesetzt',
+    'Deine Leiche dekoriert jetzt Deck 3',
+    'Johanal hat dich in seinen Haarknoten geflochten',
+    'Ein Zweig aus Johanals Rücken wächst jetzt aus dir',
+    'Du bist im Dunkeln falsch abgebogen',
+    'Die Säure hat dich zu Suppe gemacht',
+    'Johanal hat einen Furz in deine Richtung gelassen. Das war genug.',
+    'Der Lauerer hat lange auf diesen Moment gewartet',
+    'Du hättest nicht umdrehen sollen',
+    'Johanal sammelt jetzt deine Zähne',
+    'Die Marienfeld hat eine neue Passagierin – dich, als Fleck an der Wand',
+    'Du wurdest offiziell aus der Crew-Liste gestrichen',
+    'Johanal hat dich als Zahnstocher benutzt',
+    'Die Wände haben dich eingeatmet'
+  ];
+  let lastDeathText = -1;
+  function pickDeathText() {
+    let i; do { i = fl(Math.random() * DEATH_TEXTS.length); } while (i === lastDeathText);
+    lastDeathText = i; return DEATH_TEXTS[i];
+  }
+  let deathText = '';
   // Farben pro Deck
   const THEMES = {
     cargo:   { bg: ['#0b1016', '#141c22'], wall: '#27313a', edge: '#5d6f78', rib: '#0f161c', glow: '#ffcf8a', acid: '#7dff5a' },
@@ -143,11 +177,11 @@
     else { p.vy = -330; p.vx = (p.x + p.w / 2 < fromX ? -1 : 1) * 200; }
     return true;
   }
-  function die() { Sfx.play('die'); deaths++; phase = 'dead'; phaseT = 2.0; stalker = null; }
+  function die() { Sfx.play('die'); deaths++; deathText = pickDeathText(); phase = 'dead'; phaseT = 2.0; stalker = null; }
   // Alle Leben verloren: Auswahl – am Checkpoint weiter, Level neu oder Hauptmenü
   function showDeathMenu() {
     phase = 'gameover';
-    $('overTitle').textContent = 'Du bist tot';
+    $('overTitle').textContent = deathText; $('overTitle').classList.add('deathT');
     $('overText').textContent = checkAt ? 'Du kannst am letzten Checkpoint weitermachen.' : (L.boss ? 'Johanal wartet.' : 'Noch kein Checkpoint erreicht.');
     $('overNext').style.display = 'none'; $('overResume').style.display = 'none';
     $('overCheck').style.display = checkAt ? '' : 'none'; $('overRetry').style.display = ''; $('overRetry').textContent = L.boss ? 'Bosskampf neu' : 'Level neu starten';
@@ -621,7 +655,9 @@
       ctx.setTransform(SC, 0, 0, SC, 0, 0); }
     if (scareT > 0) drawScare();
     if (phase === 'dead' || phase === 'gameover') { const k = phase === 'gameover' ? 1 : Math.min(1, (2.0 - phaseT) / 0.6); ctx.fillStyle = 'rgba(25,0,0,' + Math.min(0.9, k) + ')'; ctx.fillRect(0, 0, VW, VH);
-      ctx.globalAlpha = k; ctx.textAlign = 'center'; ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px Georgia, serif'; if (phase === 'dead') ctx.fillText('DU BIST TOT', VW / 2 + (Math.random() - 0.5) * 3, VH * 0.45);
+      ctx.globalAlpha = k; ctx.textAlign = 'center'; ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px Georgia, serif'; if (phase === 'dead') { ctx.font = 'bold 22px Georgia, serif'; const words = deathText.split(' '), lines = [''];
+        for (const w of words) { const t = (lines[lines.length - 1] + ' ' + w).trim(); if (ctx.measureText(t).width > VW * 0.8 && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = t; }
+        lines.forEach((ln, i) => ctx.fillText(ln, VW / 2 + (Math.random() - 0.5) * 3, VH * 0.45 + (i - (lines.length - 1) / 2) * 28)); }
       ctx.globalAlpha = 1; }
     if (introT > 0) { const a = Math.min(1, introT / 0.8, (3.2 - introT) / 0.4); ctx.globalAlpha = a; ctx.textAlign = 'center';
       ctx.fillStyle = '#d8dde6'; ctx.font = 'bold 26px Georgia, serif'; ctx.fillText(L.name, VW / 2, VH * 0.36);
@@ -697,14 +733,14 @@
     const best = save.best[levelIdx], isBest = !best || time < best; if (isBest) save.best[levelIdx] = time;
     save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, levelIdx + 2)); store();
     const lastLvl = levelIdx === LEVELS.length - 1;
-    $('overTitle').textContent = lastLvl ? 'Johanal ist besiegt' : 'Deck geschafft';
+    $('overTitle').classList.remove('deathT'); $('overTitle').textContent = lastLvl ? 'Johanal ist besiegt' : 'Deck geschafft';
     $('overText').innerHTML = (lastLvl ? 'Die Marienfeld ist still. Für den Moment.<br><br>' : '') +
       'Zeit: <b>' + fmt(time) + '</b>' + (isBest ? ' (Bestzeit!)' : '') + '<br>Datenchips: <b>' + chips + ' / ' + chipsTotal + '</b><br>Tode: <b>' + deaths + '</b>';
     $('overNext').style.display = lastLvl ? 'none' : ''; $('overResume').style.display = 'none'; $('overRetry').style.display = ''; $('overCheck').style.display = 'none'; $('overRetry').textContent = 'Nochmal';
     $('over').style.display = 'flex'; $('touch').style.display = 'none';
   }
   function togglePause() {
-    if (phase === 'play') { phase = 'pause'; $('overTitle').textContent = 'Pause'; $('overText').textContent = L.name + ' · ' + L.sub;
+    if (phase === 'play') { phase = 'pause'; $('overTitle').classList.remove('deathT'); $('overTitle').textContent = 'Pause'; $('overText').textContent = L.name + ' · ' + L.sub;
       $('overNext').style.display = 'none'; $('overResume').style.display = ''; $('overRetry').style.display = ''; $('overCheck').style.display = 'none'; $('overRetry').textContent = 'Nochmal'; $('over').style.display = 'flex'; }
     else if (phase === 'pause') { phase = 'play'; $('over').style.display = 'none'; }
   }
